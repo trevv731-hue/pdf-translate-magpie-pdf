@@ -1,0 +1,21 @@
+{
+  "name": "magpie-agent-pdf-translate",
+  "version": "0.1.0",
+  "description": "PDF Translate as a magpie agent: pick one of magpie's models for it on the Agents page, and the translator runs on magpie's gateway",
+  "type": "module",
+  "files": [
+    "pdf-translate.agent.js"
+  ],
+  "keywords": [
+    "magpie",
+    "magpie-agent",
+    "pdf",
+    "translation",
+    "llm-gateway"
+  ],
+  "license": "MIT",
+  "private": true,
+  "magpie": {
+    "agent": "./pdf-translate.agent.js"
+  }
+}

@@ -1,0 +1,26 @@
+# Runtime and vendor trees (large, machine-specific, reproducible)
+venv/
+python/
+models/
+
+# Backups and retired UI kept on disk for reference only
+_backup_*/
+_removed_*/
+_ui_old/
+
+# Historical copies of the scripts
+*.bak
+*.bak-*
+*.before-*
+
+# Local config holds a real API key; config.env.example is the tracked copy
+config.env
+config.env.bak-*
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Logs and generated assets
+*.log
+ui.bmp

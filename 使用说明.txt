@@ -1,0 +1,138 @@
+﻿========================================
+  PDF 论文翻译工具（便携版）使用说明
+========================================
+
+【这是什么】
+一个命令行小工具：丢一堆英文 PDF 进去，它逐个翻成纯中文 PDF。
+尽量保留公式、图表和排版。不需要安装，不联网下载模型（首次除外）。
+
+【最快的用法：拖放】
+把 PDF（可多选，也可以拖整个文件夹）直接拖到「翻译.bat」图标上
+（「pdfq.bat」是同一个程序，两个名字都能用）。
+一次拖多个就按拖进来的顺序一个个翻，翻完即结束。
+没有跨次运行的历史队列：关掉窗口后再拖什么就翻什么。
+
+【命令行用法】
+在文件夹空白处按住 Shift 右键 →「在此处打开 PowerShell/终端」，然后：
+
+    .\翻译.bat a.pdf b.pdf 论文目录\     直接翻这些文件
+    .\翻译.bat --plan a.pdf              只列出会翻哪些，不开始
+    .\翻译.bat config                    看引擎与并发设置
+    .\翻译.bat logs                      打开日志文件夹
+    .\翻译.bat clean                     看临时文件能清多少（不删）
+    .\翻译.bat clean --force             真的清掉
+
+常用选项：
+    --force        配合 clean 使用，真的删除临时文件
+    --qps 6        每秒请求数上限（默认 10）；实际从 3 起步，稳住再往上加
+    --no-adapt     关掉自适应限流，固定用 --qps
+    --no-color     关掉颜色
+
+【结果在哪】
+生成在原 PDF 旁边的同一个文件夹：
+    文件名_中文.pdf
+原文件不会被修改；babeldoc 产生的 .zh.mono.pdf 之类中间稿会自动清掉。
+如果「文件名_中文.pdf」已存在，会自动另存为 _v2、_v3，旧译本不会被覆盖。
+
+【一次运行是怎么跑的】
+- 串行：一次翻一个（单文件内存峰值约 2GB，串行最稳）
+- 没有持久化队列：这一次给了哪些文件就翻哪些，翻完即结束
+- 每个文件最多试 3 次，第 n 次重试前等 20×n 秒
+- 单文件最长 90 分钟，超时算失败，继续下一个
+- 每篇单独一个日志，在 %LOCALAPPDATA%\PDFTranslateQueue\logs
+
+【关于速度】
+免费接口（SiliconFlow 免费档）的上限由服务端决定，经常撞限流。
+本工具为此做了几件事：
+
+  1. 整批文件共用一个进程 —— 版面模型、翻译引擎只加载一次，
+     不是每个文件重来一遍
+  2. 从保守的并发起步，撞到 429 自动降速、稳住了再升回去
+     （终端里那行「并发 3 → 2」就是它在工作）
+  3. 限流后的等待从最长 120 秒压到几秒 —— 旧版有将近一半时间
+     不是在翻译，而是在等重试
+  4. 跳过术语抽取：那是拿全文再跑一遍大模型，实测占整篇的 13%，
+     而你要的是译文不是术语表
+
+想真正快起来，用自己的 API Key（DeepSeek 很便宜，一篇论文几分钱，
+并发能开到 32 甚至 64）：
+
+    .\翻译.bat config --engine deepseek --key sk-你的密钥 --set-qps 32
+
+也可以直接改文件夹里的 config.env：
+
+    ENGINE=deepseek
+    API_KEY=sk-xxxxxxxx
+    MODEL=deepseek-chat
+    QPS=32
+
+【模型来源：默认、在 Magpie 里选定、跟随 Magpie 当前模型】
+面板上「模型来源」有三个选项，对应 config.env 里的 MODEL_SOURCE：
+
+    MODEL_SOURCE=public    默认。走公共免费节点（SiliconFlow Free），
+                           不需要 Magpie、不需要 API Key、不用挑模型
+    MODEL_SOURCE=pinned    在 Magpie 里选定。模型由 Magpie 的 Agents 页面
+                           写进 config.env，钉住不动，不受别的 agent 换模型影响
+    MODEL_SOURCE=magpie    跟随 Magpie 当前模型。走本机 Magpie 反代，模型每次
+                           开跑前现读 Magpie 现在给 agent 用的那个
+
+【推荐：在 Magpie 里给 PDF 翻译选模型】
+PDF 翻译已经注册成 Magpie 的一个 agent（插件在 magpie-plugin\ 里），
+所以 Magpie 的 Agents 页会多出一行「PDF Translate」：
+
+  1. 面板上点「在 Magpie 里选模型…」（或命令行选择器按 A）
+  2. Magpie 打开后，在 Agents 页找到 PDF Translate 那一行
+  3. 在那一行选一个模型
+
+选完 Magpie 会把模型名、网关地址和它给 PDF 翻译单独签发的 key 一起写进
+config.env，翻译下次开跑就用新的。好处是：
+
+  - 换模型完全在 Magpie 里点，不用回来改配置文件
+  - PDF 翻译有自己独立的 key，用量和额度在 Magpie 里单独可见
+  - 想用哪个供应商、哪个账号、失败时怎么切换，全在 Magpie 里配
+
+插件是这台机器上装的，重装/换机器后补一次：
+
+    magpie plugin add "D:\Tools\PDF翻译工具-便携版\magpie-plugin"
+
+「跟随 Magpie 当前模型」和「在 Magpie 里选定」的区别：前者跟着 Magpie
+面板上那个「当前模型」走（你在 Pi / Codex 里换了模型，这里也跟着变）；
+后者只认你在 PDF Translate 那一行选的那个。两种都走 Magpie 反代。
+
+读不到模型 / 网关离线 / 名字不在网关列表里时，「跟随 Magpie」会自动回退
+到 config.env 里 MODEL 那行的固定模型，不会把不存在的模型名发给网关。
+命令行也能改：
+
+    .\翻译.bat config --model-source pinned
+    .\翻译.bat config --model-source magpie
+    .\翻译.bat config --model-source public
+
+【常见问题】
+1. 双击/拖放没反应？
+   - 多半被杀毒软件拦了，选「允许运行」
+   - 窗口一闪而过时，在终端里手动跑一次，错误会留在屏幕上
+2. 某个文件一直失败？
+   - `.\翻译.bat logs` 打开日志看最后几十行，基本都是接口限流或网络
+   - 扫描版 PDF（图片型）先做 OCR 再来翻译
+3. 中途关了窗口？
+   - 把同一批文件再拖一次就会重新开始（没有历史队列可续跑）
+4. 想重翻某个文件？
+   - 直接再拖一次，会生成 `_v2`，不覆盖原译本
+5. 输出只有中文、没有原文 —— 这是设计如此
+
+【目录结构】
+  python\      内置 Python 运行环境
+  venv\        翻译引擎（真正干活的是它）
+  models\      离线种子：版面模型、字体、cmap（约 400MB）
+               首次运行会复制到 %USERPROFILE%\.cache\babeldoc，
+               之后程序只读那份缓存。换新机器时靠它免下载。
+  pdfq.py      主程序（命令行批量翻译）
+  cleanup.py   临时文件清理（pdfq 开跑前会自动跑一次）
+  pdfq.bat     启动器（双击/拖放用这个）
+  翻译.bat     启动器的中文名别名，和 pdfq.bat 等价
+  config.env   引擎配置（key、模型、模型来源、并发）
+  magpie-plugin\  Magpie 插件：让 PDF 翻译出现在 Magpie 的 Agents 页，
+                在那一行选模型即可切换翻译用的模型
+  _ui_old\     已停用的旧窗口界面，留着备查，可以忽略
+  _trim.py     瘦身脚本（升级依赖后如果又长出没用的包，跑它清理）
+========================================
