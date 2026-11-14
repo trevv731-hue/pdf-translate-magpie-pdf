@@ -10,8 +10,9 @@ The engine is [PDFMathTranslate-next](https://github.com/PDFMathTranslate-next/P
 ## Using it
 
 Drag PDFs (or a folder of them) onto `翻译.bat`. Each file is translated in
-turn and written beside the original as `<name>_中文.pdf`. An existing
-translation is never overwritten: the next one becomes `_v2`, `_v3`, and so on.
+turn and written beside the original as `<name>_中文.pdf`. Re-translating a file
+overwrites that file in place; `_v2`, `_v3` only appear when the old translation
+is locked by another program.
 
 Command line:
 

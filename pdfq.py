@@ -282,16 +282,13 @@ def target_of(pdf: Path) -> Path:
     return pdf.with_name(stem + OUTPUT_SUFFIX)
 
 
-def unique_target(pdf: Path) -> Path:
-    """给这一轮的产物挑一个不覆盖已有译本的名字。
+def fallback_target(pdf: Path) -> Path:
+    """覆盖写不下去时的备用名：``_中文_v2.pdf``、``_v3``……
 
-    用户在译本上加过批注（批注存在阅读器自己的库里，按页码定位），覆盖同名
-    文件会让高亮和手写全部错位。所以重翻一律另存：``_中文.pdf`` 已存在时用
-    ``_中文_v2.pdf``，再存在就 ``_v3``……旧文件一个字节都不动。
+    只有在 ``_中文.pdf`` 正被别的程序占用（Windows 独占锁，os.replace 会抛
+    PermissionError）时才会用到。正常路径不会产生带版本号的文件。
     """
     target = target_of(pdf)
-    if not target.exists():
-        return target
     stem, suffix = target.stem, target.suffix
     for i in range(2, 1000):
         alt = target.with_name("%s_v%d%s" % (stem, i, suffix))
@@ -778,13 +775,22 @@ def publish(pdf: Path, mono: Path, log) -> Path:
         if doc.page_count < 1 or doc.is_encrypted:
             raise RuntimeError("译本 PDF 无法正常读取")
 
-    target = unique_target(pdf)
+    # 输出名固定是「原名_中文.pdf」，重翻直接顶掉旧译本。
+    target = target_of(pdf)
     staging = target.with_name(".pdfq-" + target.name + ".tmp")
     try:
         if not subset_fonts(mono, staging, log):
             shutil.copyfile(mono, staging)
         scrub_metadata(pdf, staging, log, title=target.stem)
-        os.replace(str(staging), str(target))   # 原子替换
+        try:
+            os.replace(str(staging), str(target))   # 原子替换，旧译本被顶掉
+        except OSError as exc:
+            # 旧译本正被阅读器占着（Windows 独占锁）：退到 _v2，别让整篇白翻。
+            target = fallback_target(pdf)
+            log.warning("覆盖 %s 失败（%s），改存为 %s",
+                        target_of(pdf).name, exc, target.name)
+            scrub_metadata(pdf, staging, log, title=target.stem)
+            os.replace(str(staging), str(target))
     finally:
         try:
             staging.unlink()
